@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{--ink:#F4F3F0;--soft:rgba(244,243,240,.78);--mute:rgba(244,243,240,.55);--gold:#B08A55;--gold2:#CDAE80;--champ:#EBD3A6;--line:rgba(205,174,128,.24);--red:#E58579;--green:#74C6A0;--amber:#E6B865;--bg:#07021F;color-scheme:dark}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -78,6 +79,7 @@ input[type=range]{width:100%;margin:10px 0 4px;accent-color:#E8CC97;height:28px}
 .cta p{font-size:15px;color:#fff;max-width:70ch}
 .cta p span{color:var(--champ)}
 .foot{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;font-size:11.5px;color:var(--mute)}
+.msg{margin:40px 0;font-size:15px;color:var(--soft)}
 .foot b{font-family:Cinzel,Georgia,serif;font-weight:500;color:var(--gold2);letter-spacing:.12em}
 </style>
 </head>
@@ -86,7 +88,7 @@ input[type=range]{width:100%;margin:10px 0 4px;accent-color:#E8CC97;height:28px}
 <script>
 (function(){
 "use strict";
-/* ---------- Lecture du lien personnel ---------- */
+/* ---------- Lecture du lien personnel : prénom, métier, secteur ---------- */
 function decode(h){
   try{
     h=(h||"").replace(/^#/,"").trim(); if(!h) return null;
@@ -99,65 +101,19 @@ function decode(h){
 var P=decode(location.hash)||{};
 var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});};
 var prenom=(P.p||"").toString().slice(0,40);
-var METIERS={cpt:1,cdg:1,tre:1,daf:1};
-var m=METIERS[P.m]?P.m:"daf";
+var m={cpt:1,cdg:1,tre:1,daf:1}[P.m]?P.m:"daf";
 var cur=P.d==="EUR"?"EUR":"MAD";
+var app=document.getElementById("app");
+app.innerHTML='<p class="msg">Chargement des données du classeur Excel…</p>';
 
-/* ---------- Secteurs (entreprises fictives) ---------- */
-var SECT={
- dis:{l:"Distribution",n:"Alboran Distribution",ca:420,gm:.23,eb:.075,dso:55,dio:45,dpo:70,sea:[.9,.88,.95,1,1.02,1.05,1.1,1.08,.98,1,1.02,1.12]},
- ind:{l:"Industrie",n:"Méca-Nord Industries",ca:680,gm:.34,eb:.14,dso:75,dio:80,dpo:65,sea:[.95,.98,1.04,1,1.02,1.03,.9,.82,1.05,1.07,1.05,1.09]},
- btp:{l:"BTP",n:"Bâtisseurs du Détroit",ca:350,gm:.19,eb:.09,dso:120,dio:25,dpo:95,sea:[.85,.9,1,1.04,1.08,1.1,1.02,.92,1.02,1.05,1,1.02]},
- srv:{l:"Services",n:"Médina Services",ca:95,gm:.46,eb:.16,dso:70,dio:0,dpo:45,sea:[.95,.97,1.02,1,1.01,1,.92,.86,1.04,1.07,1.06,1.1]},
- agr:{l:"Agroalimentaire",n:"Saveurs du Souss",ca:510,gm:.28,eb:.11,dso:50,dio:55,dpo:60,sea:[.92,.9,1.12,1.18,1.02,.96,1,.98,.97,1,.95,1]},
- aut:{l:"Automobile",n:"Tanger Auto Composants",ca:900,gm:.19,eb:.095,dso:60,dio:40,dpo:75,sea:[1,1.02,1.05,1.03,1.02,1.01,.95,.78,1.04,1.06,1.03,1.01]},
- imm:{l:"Immobilier",n:"Riad Promotion",ca:260,gm:.33,eb:.21,dso:40,dio:240,dpo:90,sea:[.8,.85,.95,1,1.02,1.1,1.15,1.05,.95,1,1.03,1.1]},
- tec:{l:"Technologies & télécoms",n:"Nova Digital",ca:180,gm:.52,eb:.18,dso:80,dio:5,dpo:50,sea:[.92,.95,1.03,1,1.02,1.04,.93,.88,1.02,1.05,1.06,1.1]},
- fin:{l:"Banque, assurance & finance",n:"Atlas Courtage",ca:120,gm:.58,eb:.22,dso:45,dio:0,dpo:40,sea:[1.05,.98,1.02,.98,1,1,.96,.92,1,1.02,1.01,1.06]},
- cab:{l:"Audit & expertise comptable",n:"Horizon Conseil",ca:40,gm:.62,eb:.19,dso:95,dio:0,dpo:35,sea:[1.1,1.12,1.2,1.15,1,.95,.85,.7,.95,1,.98,1]},
- log:{l:"Transport & logistique",n:"Détroit Logistique",ca:300,gm:.24,eb:.1,dso:70,dio:5,dpo:60,sea:[.94,.92,1,1,1.02,1.04,1.06,1.02,.99,1,1,1.01]},
- ene:{l:"Énergie & mines",n:"Sahara Énergie",ca:1200,gm:.3,eb:.2,dso:65,dio:35,dpo:80,sea:[1.05,1.02,1,.97,.96,1,1.04,1.04,.98,.98,.99,1.02]},
- san:{l:"Santé & pharmacie",n:"Pharma Ifrane",ca:380,gm:.38,eb:.15,dso:90,dio:90,dpo:70,sea:[1.06,1.04,1.02,.98,.96,.95,.92,.9,1.02,1.04,1.04,1.07]},
- tex:{l:"Textile & habillement",n:"Textiles de Fès",ca:220,gm:.26,eb:.08,dso:85,dio:95,dpo:60,sea:[.9,.95,1.05,1.08,1.05,1,.9,.85,1.05,1.06,1.03,1.08]},
- tou:{l:"Tourisme & hôtellerie",n:"Riad Hospitality",ca:150,gm:.62,eb:.24,dso:25,dio:5,dpo:50,sea:[.75,.85,1.05,1.15,1.1,1,1.2,1.25,1.05,1,.8,.8]}
-};
-var S=SECT[P.s]||SECT.ind;
-var scale=cur==="EUR"?0.1:1;
-var U=cur==="EUR"?"M€":"M MAD";
-
-/* ---------- Hasard déterministe : chaque lien a ses propres chiffres ---------- */
-function hashStr(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
-var seed=hashStr((prenom||"demo")+"|"+m+"|"+(P.s||"ind"));
-function rnd(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}
-function rr(a,b){return a+(b-a)*rnd();}
+/* ---------- Mise en forme ---------- */
 var nf=function(v,d){return new Intl.NumberFormat("fr-FR",{minimumFractionDigits:d,maximumFractionDigits:d}).format(v);};
 var M=function(v){var a=Math.abs(v);return nf(v,a<10?2:a<100?1:0);};
 var pct=function(v,d){return nf(v*100,d==null?1:d)+" %";};
-var MO=["Janv.","Févr.","Mars","Avr.","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
-
-/* ---------- Données de base ---------- */
-var CAy=S.ca*scale*rr(.85,1.2);              // CA annuel budgété
-var sw=S.sea.reduce(function(a,b){return a+b;},0);
-var N=10;                                     // cumul à fin octobre
-var bud=S.sea.map(function(w){return CAy*w/sw;});
-var bias=rr(-.06,.04);
-var real=bud.slice(0,N).map(function(b){return b*(1+bias+rr(-.05,.05));});
-var CAb=bud.slice(0,N).reduce(function(a,b){return a+b;},0);
-var CAr=real.reduce(function(a,b){return a+b;},0);
-var gm=S.gm*(1+rr(-.05,.04)), ebp=S.eb*(1+rr(-.15,.1));
-var ach=CAr*(1-gm), ext=CAr*(gm-ebp)*.42, pers=CAr*(gm-ebp)*.58, EB=CAr-ach-ext-pers;
-var dot=CAr*rr(.028,.04), fi=CAr*rr(.006,.014), imp=Math.max(0,(EB-dot-fi)*.3), RN=EB-dot-fi-imp;
-var CAa=CAr/N*12;
-var dso=Math.round(S.dso*rr(.92,1.15)), dio=Math.round(S.dio*rr(.9,1.1)), dpo=Math.round(S.dpo*rr(.9,1.08));
-var achA=CAa*(1-gm);
-var BFR=CAa/365*dso+achA/365*dio-achA/365*dpo;
-var bfrJ=Math.round(BFR/CAa*365);
-var Xc=EB-imp-fi, dBFR=Xc*rr(.12,.25), capex=Xc*rr(.25,.45);
-var FCF=EB-imp-fi-dBFR-capex;
-var parJour=CAa/365;
+var sum=function(a){return a.reduce(function(x,y){return x+(+y||0);},0);};
 
 /* ---------- ECharts : réglages communs ---------- */
-var C={soft:"rgba(244,243,240,.78)",mute:"rgba(244,243,240,.55)",gold:"#CDAE80",champ:"#EBD3A6",green:"#74C6A0",red:"#E58579",amber:"#E6B865",line:"rgba(255,255,255,.10)"};
+var C={soft:"rgba(244,243,240,.78)",mute:"rgba(244,243,240,.55)",gold:"#CDAE80",champ:"#EBD3A6",green:"#74C6A0",red:"#E58579"};
 var AXL={color:C.mute,fontFamily:"Inter",fontSize:11};
 var SPL={lineStyle:{color:"rgba(255,255,255,.07)"}};
 function LG(c0,c1){return new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:c0},{offset:1,color:c1}]);}
@@ -165,8 +121,7 @@ var GOLDV=function(){return LG("#F6E3BC","#9C7A4A");};
 var charts=[];
 function mk(id,opt){var el=document.getElementById(id);if(!el||!window.echarts)return null;var c=echarts.init(el,null,{renderer:"canvas"});opt.textStyle={fontFamily:"Inter",color:C.soft};opt.animationDuration=900;c.setOption(opt);charts.push(c);return c;}
 window.addEventListener("resize",function(){charts.forEach(function(c){c.resize();});});
-var TT={trigger:"axis",backgroundColor:"rgba(13,8,56,.95)",borderColor:"rgba(205,174,128,.45)",textStyle:{color:"#F4F3F0",fontFamily:"Inter",fontSize:12},valueFormatter:function(v){return M(v)+" "+U;}};
-
+var U, TT;
 function waterfall(id,items,o){
   o=o||{};var el=document.getElementById(id),nar=el&&el.clientWidth<620;
   var base=[],up=[],labels=[],cum=0;
@@ -182,160 +137,175 @@ function waterfall(id,items,o){
       {type:"bar",stack:"w",data:up,barWidth:"56%",label:{show:true,position:"top",fontFamily:"Cinzel",fontSize:nar?10:12,color:C.champ,formatter:function(p){var it=items[p.dataIndex];return (it.v>=0?"":"−")+M(Math.abs(it.v));}}}]});
 }
 
-/* ---------- Rendu ---------- */
-var who=prenom?esc(prenom):"vous";
-var head=function(title,sub){return '<header class="hdr"><div class="mono" aria-hidden="true">AÉ</div><div class="ht"><div class="for">'+(prenom?"Préparé pour "+esc(prenom):"Démonstration")+'</div><h1>'+title+'</h1><div class="co">'+esc(S.n)+' · '+esc(S.l)+' · '+sub+'</div></div><div class="pills"><span class="pill f">Entreprise fictive · données simulées</span></div></header>';};
-var kpi=function(lab,val,unit,chip,cls,al){return '<div class="card'+(al?" al":"")+'"><div class="lab">'+lab+'</div><div class="big">'+val+'<small>'+unit+'</small></div><span class="chip '+cls+'">'+chip+'</span></div>';};
-var act=function(t){return '<div class="act"><span class="ex">Message clé</span><p>'+t+'</p></div>';};
-var cta='<div class="card cta"><p>Ce tableau de bord a été construit avec l\'IA à partir d\'un simple fichier Excel. <span>Vous voulez savoir comment construire le vôtre, sur vos propres chiffres ?</span> Répondez à Yassine sur LinkedIn.</p></div>';
-var foot='<footer class="foot"><span>'+esc(S.n)+' est une entreprise fictive. Tous les chiffres sont simulés et ne décrivent aucune société réelle.</span><b>L\'ART DE L\'ÉCONOMIE ACADEMY</b></footer>';
-var app=document.getElementById("app");
-var ecart=CAr/CAb-1;
+/* ---------- Chargement du classeur Excel (à côté de la page) ---------- */
+fetch("cockpit-donnees.xlsx",{cache:"no-cache"}).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.arrayBuffer();})
+.then(function(buf){
+  var wb=XLSX.read(buf,{type:"array"});
+  var T=function(n){return XLSX.utils.sheet_to_json(wb.Sheets[n],{range:1,defval:null});};
+  var par={};XLSX.utils.sheet_to_json(wb.Sheets.Parametres,{header:1}).slice(1).forEach(function(r){if(r&&r[2])par[r[2]]=r[1];});
+  render(par,T);
+})
+.catch(function(e){app.innerHTML='<p class="msg">Les données du tableau de bord sont momentanément indisponibles. Réessayez dans un instant.</p>';if(window.console)console.error(e);});
 
-if(m==="daf"){
-  app.innerHTML=head("Cockpit de direction","cumul janvier → octobre 2026")+
-  act("EBITDA de "+M(EB)+" "+U+" ("+pct(EB/CAr)+" du CA), mais "+bfrJ+" jours de chiffre d'affaires restent bloqués dans le BFR.")+
-  '<div class="kpis">'+
-   kpi("Chiffre d'affaires",M(CAr),U,(ecart>=0?"+":"")+pct(ecart)+" contre le budget",ecart>=0?"up":"dn")+
-   kpi("EBITDA",M(EB),U,pct(EB/CAr)+" du chiffre d'affaires","up")+
-   kpi("Besoin en fonds de roulement",M(BFR),U,bfrJ+" jours de chiffre d'affaires","dn",true)+
-   kpi("Cash disponible (FCF)",M(FCF),U,"après "+M(capex)+" "+U+" d'investissements",FCF>=0?"neu":"dn")+
-  '</div><div class="grid">'+
-   '<div class="card s8"><h2>Du chiffre d\'affaires au résultat net</h2><div class="sub">Cumul à fin octobre, en '+U+'</div><div id="c1" class="cv"></div></div>'+
-   '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Et si vos clients payaient plus vite ?</h3>'+
-     '<div class="ctl"><label for="r1"><span>Délai client</span><strong id="o1">'+dso+' jours</strong></label><input id="r1" type="range" min="'+Math.max(10,dso-40)+'" max="'+(dso+30)+'" value="'+dso+'"></div>'+
-     '<div class="res"><span>BFR</span><span><span class="cz">'+M(BFR)+'</span><span class="arrow">→</span><span class="cz" id="o2">'+M(BFR)+' '+U+'</span></span></div>'+
-     '<div class="res"><span>Trésorerie libérée</span><span class="cz" id="o3">0</span></div>'+
-     '<div class="res" style="margin-top:16px"><span>Un jour de délai client vaut</span><span class="cz">'+M(parJour)+' '+U+'</span></div></div>'+
-   '<div class="card s6"><h2>Chiffre d\'affaires : réel contre budget</h2><div class="sub">Par mois, en '+U+'</div><div id="c2" class="cv sm"></div></div>'+
-   '<div class="card s6"><h2>De l\'EBITDA au cash disponible</h2><div class="sub">Où part la performance, en '+U+'</div><div id="c3" class="cv sm"></div></div>'+
-   '<div class="card s12 note"><h2>Note au directeur général</h2><div class="sub">Rédigée automatiquement à partir des chiffres du cockpit</div><ol>'+
-    '<li><b>Activité.</b> Le chiffre d\'affaires atteint '+M(CAr)+' '+U+' à fin octobre, soit '+pct(CAr/CAb)+' du budget de la période ('+(ecart>=0?"+":"−")+M(Math.abs(CAr-CAb))+' '+U+').</li>'+
-    '<li><b>Rentabilité.</b> L\'EBITDA ressort à '+M(EB)+' '+U+', soit '+pct(EB/CAr)+' du chiffre d\'affaires ; le résultat net s\'établit à '+M(RN)+' '+U+'.</li>'+
-    '<li><b>Trésorerie.</b> Le BFR immobilise '+bfrJ+' jours de chiffre d\'affaires, avec un délai client de '+dso+' jours. Le cash disponible après investissements est de '+M(FCF)+' '+U+'.</li>'+
-    '<li><b>Décision proposée.</b> Réduire le délai client de 10 jours libérerait environ '+M(parJour*10)+' '+U+' de trésorerie, sans un dirham de chiffre d\'affaires en plus.</li></ol></div>'+
-  '</div>'+cta+foot;
-  waterfall("c1",[{n:"Chiffre d'affaires",v:CAr,t:1},{n:"Achats",v:-ach},{n:"Charges externes",v:-ext},{n:"Personnel",v:-pers},{n:"EBITDA",v:EB,t:1},{n:"Dotations",v:-dot},{n:"Financier",v:-fi},{n:"Impôt",v:-imp},{n:"Résultat net",v:RN,t:1}]);
-  mk("c2",{grid:{left:8,right:8,top:30,bottom:8,containLabel:true},tooltip:TT,legend:{top:0,right:0,textStyle:{color:C.soft,fontSize:11},data:["Réel","Budget"]},
-   xAxis:{type:"category",data:MO.slice(0,N),axisTick:{show:false},axisLabel:AXL},yAxis:{type:"value",axisLabel:AXL,splitLine:SPL},
-   series:[{name:"Réel",type:"bar",data:real,barWidth:"52%",itemStyle:{color:GOLDV(),borderRadius:[4,4,0,0]}},{name:"Budget",type:"line",data:bud.slice(0,N),symbol:"circle",symbolSize:6,lineStyle:{color:"#fff",type:[5,4],width:1.5},itemStyle:{color:"#fff"}}]});
-  waterfall("c3",[{n:"EBITDA",v:EB,t:1},{n:"Impôt",v:-imp},{n:"Intérêts",v:-fi},{n:"Hausse du BFR",v:-dBFR},{n:"Investissements",v:-capex},{n:"Cash disponible",v:FCF,t:1}]);
-  var r1=document.getElementById("r1");
-  r1.addEventListener("input",function(){var d=+r1.value-dso,nb=BFR+parJour*d;document.getElementById("o1").textContent=r1.value+" jours";document.getElementById("o2").textContent=M(nb)+" "+U;var o3=document.getElementById("o3");o3.textContent=(d<=0?"+":"−")+M(Math.abs(parJour*d))+" "+U;o3.className="cz "+(d<0?"good":d>0?"bad":"");});
-}
+function render(par,T){
+  var secteurs=T("Secteurs"), code=P.s;
+  var S=secteurs.filter(function(r){return r.code===code;})[0]||secteurs.filter(function(r){return r.code==="ind";})[0];
+  code=S.code;
+  var of=function(name){return T(name).filter(function(r){return r.code===code;});};
+  var Y=of("Synthese")[0];
+  var k=cur==="EUR"?(+par.facteur_eur||0.1):1;
+  U=cur==="EUR"?"M€":"M MAD";
+  TT={trigger:"axis",backgroundColor:"rgba(13,8,56,.95)",borderColor:"rgba(205,174,128,.45)",textStyle:{color:"#F4F3F0",fontFamily:"Inter",fontSize:12},valueFormatter:function(v){return M(v)+" "+U;}};
+  var y=function(key){return (+Y[key]||0)*k;};
+  var N=+par.mois_cumul||10, MO=["Janv.","Févr.","Mars","Avr.","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
+  var moisFin=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"][N-1];
+  var mens=of("Mensuel").sort(function(a,b){return a.mois_num-b.mois_num;});
+  var bud=mens.map(function(r){return (+r.budget||0)*k;});
+  var real=mens.filter(function(r){return r.mois_num<=N;}).map(function(r){return (+r.reel||0)*k;});
+  var CAr=y("ca_reel"),CAb=y("ca_budget_periode"),ecart=CAb?CAr/CAb-1:0;
+  var dso=Math.round(+S.dso), dpo=Math.round(+S.dpo);
+  var periode="cumul janvier → "+moisFin+" "+par.exercice;
 
-if(m==="cdg"){
-  var EBb=CAb*ebp*(1+rr(.02,.08));
-  var eV=(CAr-CAb)*gm*.75, eP=(CAr-CAb)*gm*.25+EBb*rr(-.04,.05), eMat=-EBb*rr(.02,.09), ePer=-EBb*rr(-.03,.06), eFG=EBb*rr(-.05,.04);
-  var EBr=EBb+eV+eP+eMat+ePer+eFG;
-  var cc=[["Production",.38],["Logistique",.14],["Commercial",.17],["Administration",.12],["Informatique",.08],["Marketing",.11]].map(function(c){var b=(CAb-CAb*ebp)*.42*c[1],r=b*(1+rr(-.06,.12));return [c[0],b,r,r/b-1];});
-  var land=function(t){var rest=bud.slice(N).reduce(function(a,b){return a+b;},0);return CAr+rest*(1+t);};
-  app.innerHTML=head("Budget contre réel","contrôle de gestion · cumul janvier → octobre 2026")+
-  act("Le chiffre d'affaires est à "+pct(CAr/CAb)+" du budget ; l'EBITDA "+(EBr>=EBb?"dépasse":"manque")+" l'objectif de "+M(Math.abs(EBr-EBb))+" "+U+".")+
-  '<div class="kpis">'+
-   kpi("CA réel",M(CAr),U,(ecart>=0?"+":"")+pct(ecart)+" contre le budget",ecart>=0?"up":"dn")+
-   kpi("EBITDA réel",M(EBr),U,(EBr>=EBb?"+":"−")+M(Math.abs(EBr-EBb))+" "+U+" contre le budget",EBr>=EBb?"up":"dn",EBr<EBb)+
-   kpi("Marge brute",pct(gm),"","objectif "+pct(S.gm),gm>=S.gm?"up":"dn")+
-   kpi("Atterrissage annuel",M(land(bias)),U,"budget "+M(CAy)+" "+U,"neu")+
-  '</div><div class="grid">'+
-   '<div class="card s8"><h2>Réel contre budget, mois par mois</h2><div class="sub">Chiffre d\'affaires en '+U+' et écart cumulé</div><div id="c1" class="cv"></div></div>'+
-   '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Où finira l\'année ?</h3>'+
-    '<div class="ctl"><label for="r1"><span>Novembre-décembre contre budget</span><strong id="o1">'+(bias>=0?"+":"")+nf(bias*100,0)+' %</strong></label><input id="r1" type="range" min="-15" max="15" value="'+Math.round(bias*100)+'"></div>'+
-    '<div class="res"><span>CA annuel estimé</span><span class="cz" id="o2">'+M(land(bias))+' '+U+'</span></div>'+
-    '<div class="res"><span>Écart au budget annuel</span><span class="cz" id="o3">—</span></div></div>'+
-   '<div class="card s6"><h2>Pourquoi l\'EBITDA s\'écarte du budget</h2><div class="sub">Analyse des écarts, en '+U+'</div><div id="c2" class="cv sm"></div></div>'+
-   '<div class="card s6"><h2>Centres de coûts sous surveillance</h2><div class="sub">Cumul à fin octobre, en '+U+'</div><div class="tw"><table><thead><tr><th>Centre</th><th class="n">Budget</th><th class="n">Réel</th><th class="n">Écart</th></tr></thead><tbody>'+
-    cc.map(function(c){return '<tr><td>'+c[0]+'</td><td class="n">'+M(c[1])+'</td><td class="n">'+M(c[2])+'</td><td class="n '+(c[3]>.05?"bad":c[3]<0?"good":"")+'">'+(c[3]>=0?"+":"")+pct(c[3])+'</td></tr>';}).join("")+
-   '</tbody></table></div></div>'+
-  '</div>'+cta+foot;
-  var cum=0,cumA=real.map(function(r,i){cum+=r-bud[i];return cum;});
-  mk("c1",{grid:{left:8,right:8,top:30,bottom:8,containLabel:true},tooltip:TT,legend:{top:0,right:0,textStyle:{color:C.soft,fontSize:11},data:["Réel","Budget","Écart cumulé"]},
-   xAxis:{type:"category",data:MO.slice(0,N),axisTick:{show:false},axisLabel:AXL},yAxis:[{type:"value",axisLabel:AXL,splitLine:SPL},{type:"value",axisLabel:AXL,splitLine:{show:false}}],
-   series:[{name:"Réel",type:"bar",data:real,barWidth:"34%",itemStyle:{color:GOLDV(),borderRadius:[4,4,0,0]}},{name:"Budget",type:"bar",data:bud.slice(0,N),barWidth:"34%",itemStyle:{color:"rgba(255,255,255,.22)",borderRadius:[4,4,0,0]}},
-    {name:"Écart cumulé",type:"line",yAxisIndex:1,data:cumA,symbol:"circle",symbolSize:6,lineStyle:{color:cum>=0?C.green:C.red,width:2},itemStyle:{color:cum>=0?C.green:C.red}}]});
-  waterfall("c2",[{n:"EBITDA budget",v:EBb,t:1},{n:"Volume",v:eV},{n:"Prix de vente",v:eP},{n:"Coût matières",v:eMat},{n:"Personnel",v:ePer},{n:"Frais généraux",v:eFG},{n:"EBITDA réel",v:EBr,t:1}],{min:Math.floor(Math.min(EBb,EBr)*.85)});
-  var r1=document.getElementById("r1");var upd=function(){var t=+r1.value/100,l=land(t),e=l/CAy-1;document.getElementById("o1").textContent=(t>=0?"+":"")+r1.value+" %";document.getElementById("o2").textContent=M(l)+" "+U;var o3=document.getElementById("o3");o3.textContent=(e>=0?"+":"")+pct(e);o3.className="cz "+(e>=0?"good":"bad");};
-  r1.addEventListener("input",upd);upd();
-}
+  var head=function(title,sub){return '<header class="hdr"><div class="mono" aria-hidden="true">AÉ</div><div class="ht"><div class="for">'+(prenom?"Préparé pour "+esc(prenom):"Démonstration")+'</div><h1>'+title+'</h1><div class="co">'+esc(S.entreprise)+' · '+esc(S.secteur)+' · '+sub+'</div></div><div class="pills"><span class="pill f">Entreprise fictive · données simulées</span></div></header>';};
+  var kpi=function(lab,val,unit,chip,cls,al){return '<div class="card'+(al?" al":"")+'"><div class="lab">'+lab+'</div><div class="big">'+val+'<small>'+unit+'</small></div><span class="chip '+cls+'">'+chip+'</span></div>';};
+  var act=function(t){return '<div class="act"><span class="ex">Message clé</span><p>'+t+'</p></div>';};
+  var cta='<div class="card cta"><p>Ce tableau de bord a été construit avec l\'IA et il est relié à un fichier Excel : chaque chiffre vient du classeur. <span>Vous voulez savoir comment construire le vôtre, sur vos propres chiffres ?</span> Répondez à Yassine sur LinkedIn.</p></div>';
+  var foot='<footer class="foot"><span>Source : classeur cockpit-donnees.xlsx. '+esc(S.entreprise)+' est une entreprise fictive ; tous les chiffres sont simulés et ne décrivent aucune société réelle.</span><b>L\'ART DE L\'ÉCONOMIE ACADEMY</b></footer>';
 
-if(m==="tre"){
-  var C0=CAa*rr(.025,.045), wk=CAa/52;
-  var W=[],enc=[],dec=[],bal=[],b=C0;
-  var dn={f:[],s:[],t:[],e:[]};
-  for(var w=1;w<=13;w++){
-    var e=wk*rr(.75,1.2)*(w===4||w===8?.7:1);
-    var f=CAa*(1-gm)/52*rr(.85,1.15), s=(w%4===1)?CAa*(gm-ebp)*.58/12*rr(.98,1.03):0, t=(w===3||w===7||w===11)?CAa*rr(.004,.008):0, ech=(w===6||w===12)?CAa*rr(.003,.006):0;
-    var d=f+s+t+ech; b=b+e-d; W.push("S"+w); enc.push(e); dec.push(-d); bal.push(b);
-    dn.f.push(f);dn.s.push(s);dn.t.push(t);dn.e.push(ech);
+  if(m==="daf"){
+    var ach=y("achats"),ext=y("charges_externes"),pers=y("personnel"),EB=y("ebitda"),dot=y("dotations"),fi=y("financier"),imp=y("impot"),RN=y("resultat_net"),BFR=y("bfr"),bfrJ=Math.round(+Y.bfr_jours),dB=y("var_bfr"),capex=y("investissements"),FCF=y("fcf"),parJour=y("ca_annualise")/365;
+    app.innerHTML=head("Cockpit de direction",periode)+
+    act("EBITDA de "+M(EB)+" "+U+" ("+pct(EB/CAr)+" du CA), mais "+bfrJ+" jours de chiffre d'affaires restent bloqués dans le BFR.")+
+    '<div class="kpis">'+
+     kpi("Chiffre d'affaires",M(CAr),U,(ecart>=0?"+":"")+pct(ecart)+" contre le budget",ecart>=0?"up":"dn")+
+     kpi("EBITDA",M(EB),U,pct(EB/CAr)+" du chiffre d'affaires","up")+
+     kpi("Besoin en fonds de roulement",M(BFR),U,bfrJ+" jours de chiffre d'affaires","dn",true)+
+     kpi("Cash disponible (FCF)",M(FCF),U,"après "+M(capex)+" "+U+" d'investissements",FCF>=0?"neu":"dn")+
+    '</div><div class="grid">'+
+     '<div class="card s8"><h2>Du chiffre d\'affaires au résultat net</h2><div class="sub">Cumul à fin '+moisFin+', en '+U+'</div><div id="c1" class="cv"></div></div>'+
+     '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Et si vos clients payaient plus vite ?</h3>'+
+       '<div class="ctl"><label for="r1"><span>Délai client</span><strong id="o1">'+dso+' jours</strong></label><input id="r1" type="range" min="'+Math.max(10,dso-40)+'" max="'+(dso+30)+'" value="'+dso+'"></div>'+
+       '<div class="res"><span>BFR</span><span><span class="cz">'+M(BFR)+'</span><span class="arrow">→</span><span class="cz" id="o2">'+M(BFR)+' '+U+'</span></span></div>'+
+       '<div class="res"><span>Trésorerie libérée</span><span class="cz" id="o3">0</span></div>'+
+       '<div class="res" style="margin-top:16px"><span>Un jour de délai client vaut</span><span class="cz">'+M(parJour)+' '+U+'</span></div></div>'+
+     '<div class="card s6"><h2>Chiffre d\'affaires : réel contre budget</h2><div class="sub">Par mois, en '+U+'</div><div id="c2" class="cv sm"></div></div>'+
+     '<div class="card s6"><h2>De l\'EBITDA au cash disponible</h2><div class="sub">Où part la performance, en '+U+'</div><div id="c3" class="cv sm"></div></div>'+
+     '<div class="card s12 note"><h2>Note au directeur général</h2><div class="sub">Rédigée automatiquement à partir des chiffres du classeur</div><ol>'+
+      '<li><b>Activité.</b> Le chiffre d\'affaires atteint '+M(CAr)+' '+U+' à fin '+moisFin+', soit '+pct(CAr/CAb)+' du budget de la période ('+(ecart>=0?"+":"−")+M(Math.abs(CAr-CAb))+' '+U+').</li>'+
+      '<li><b>Rentabilité.</b> L\'EBITDA ressort à '+M(EB)+' '+U+', soit '+pct(EB/CAr)+' du chiffre d\'affaires ; le résultat net s\'établit à '+M(RN)+' '+U+'.</li>'+
+      '<li><b>Trésorerie.</b> Le BFR immobilise '+bfrJ+' jours de chiffre d\'affaires, avec un délai client de '+dso+' jours. Le cash disponible après investissements est de '+M(FCF)+' '+U+'.</li>'+
+      '<li><b>Décision proposée.</b> Réduire le délai client de 10 jours libérerait environ '+M(parJour*10)+' '+U+' de trésorerie, sans un dirham de chiffre d\'affaires en plus.</li></ol></div>'+
+    '</div>'+cta+foot;
+    waterfall("c1",[{n:"Chiffre d'affaires",v:CAr,t:1},{n:"Achats",v:-ach},{n:"Charges externes",v:-ext},{n:"Personnel",v:-pers},{n:"EBITDA",v:EB,t:1},{n:"Dotations",v:-dot},{n:"Financier",v:-fi},{n:"Impôt",v:-imp},{n:"Résultat net",v:RN,t:1}]);
+    mk("c2",{grid:{left:8,right:8,top:30,bottom:8,containLabel:true},tooltip:TT,legend:{top:0,right:0,textStyle:{color:C.soft,fontSize:11},data:["Réel","Budget"]},
+     xAxis:{type:"category",data:MO.slice(0,N),axisTick:{show:false},axisLabel:AXL},yAxis:{type:"value",axisLabel:AXL,splitLine:SPL},
+     series:[{name:"Réel",type:"bar",data:real,barWidth:"52%",itemStyle:{color:GOLDV(),borderRadius:[4,4,0,0]}},{name:"Budget",type:"line",data:bud.slice(0,N),symbol:"circle",symbolSize:6,lineStyle:{color:"#fff",type:[5,4],width:1.5},itemStyle:{color:"#fff"}}]});
+    waterfall("c3",[{n:"EBITDA",v:EB,t:1},{n:"Impôt",v:-imp},{n:"Intérêts",v:-fi},{n:"Hausse du BFR",v:-dB},{n:"Investissements",v:-capex},{n:"Cash disponible",v:FCF,t:1}]);
+    var r1=document.getElementById("r1");
+    r1.addEventListener("input",function(){var d=+r1.value-dso,nb=BFR+parJour*d;document.getElementById("o1").textContent=r1.value+" jours";document.getElementById("o2").textContent=M(nb)+" "+U;var o3=document.getElementById("o3");o3.textContent=(d<=0?"+":"−")+M(Math.abs(parJour*d))+" "+U;o3.className="cz "+(d<0?"good":d>0?"bad":"");});
   }
-  var seuil=C0*.3, minB=Math.min.apply(null,bal), minW=bal.indexOf(minB)+1;
-  var sum=function(a){return a.reduce(function(x,y){return x+y;},0);};
-  var simB=function(r){var bb=C0,mn=Infinity,mw=1;for(var i=0;i<13;i++){var lag=enc[i]*r;bb+=enc[i]-lag+(i>=4?enc[i-4]*r:0)+dec[i];if(bb<mn){mn=bb;mw=i+1;}}return [mn,mw];};
-  app.innerHTML=head("Trésorerie à 13 semaines","trésorerie · prévision glissante")+
-  act("Point bas de "+M(minB)+" "+U+" en semaine "+minW+(minB<seuil?" : sous le seuil de sécurité, il faut agir maintenant.":" : le seuil de sécurité tient, mais la marge est faible."))+
-  '<div class="kpis">'+
-   kpi("Trésorerie aujourd\'hui",M(C0),U,"seuil de sécurité "+M(seuil)+" "+U,"neu")+
-   kpi("Point bas",M(minB),U,"semaine "+minW,minB<seuil?"dn":"up",minB<seuil)+
-   kpi("Trésorerie à 13 semaines",M(bal[12]),U,(bal[12]>=C0?"+":"−")+M(Math.abs(bal[12]-C0))+" "+U,bal[12]>=C0?"up":"dn")+
-   kpi("Délai client",dso,"jours","fournisseurs "+dpo+" jours",dso>dpo?"dn":"up")+
-  '</div><div class="grid">'+
-   '<div class="card s8"><h2>Solde de trésorerie, semaine par semaine</h2><div class="sub">Encaissements, décaissements et solde, en '+U+'</div><div id="c1" class="cv"></div></div>'+
-   '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Et si les clients payaient en retard ?</h3>'+
-    '<div class="ctl"><label for="r1"><span>Encaissements décalés d\'un mois</span><strong id="o1">0 %</strong></label><input id="r1" type="range" min="0" max="40" value="0"></div>'+
-    '<div class="res"><span>Point bas</span><span><span class="cz">'+M(minB)+'</span><span class="arrow">→</span><span class="cz" id="o2">'+M(minB)+' '+U+'</span></span></div>'+
-    '<div class="res"><span>Semaine du point bas</span><span class="cz" id="o3">S'+minW+'</span></div></div>'+
-   '<div class="card s6"><h2>Ce qui sort de la caisse</h2><div class="sub">Décaissements sur 13 semaines, en '+U+'</div><div id="c2" class="cv sm"></div></div>'+
-   '<div class="card s6"><h2>Les semaines à surveiller</h2><div class="sub">Solde prévisionnel et marge sur le seuil</div><div class="tw"><table><thead><tr><th>Semaine</th><th class="n">Solde</th><th class="n">Marge sur le seuil</th></tr></thead><tbody>'+
-    bal.map(function(v,i){return [i,v];}).sort(function(a,b){return a[1]-b[1];}).slice(0,5).map(function(x){var mg=x[1]-seuil;return '<tr><td>Semaine '+(x[0]+1)+'</td><td class="n">'+M(x[1])+'</td><td class="n '+(mg<0?"bad":"good")+'">'+(mg>=0?"+":"−")+M(Math.abs(mg))+'</td></tr>';}).join("")+
-   '</tbody></table></div></div>'+
-  '</div>'+cta+foot;
-  mk("c1",{grid:{left:8,right:8,top:30,bottom:8,containLabel:true},tooltip:TT,legend:{top:0,right:0,textStyle:{color:C.soft,fontSize:11},data:["Encaissements","Décaissements","Solde"]},
-   xAxis:{type:"category",data:W,axisTick:{show:false},axisLabel:AXL},yAxis:{type:"value",axisLabel:AXL,splitLine:SPL},
-   series:[{name:"Encaissements",type:"bar",stack:"x",data:enc,barWidth:"46%",itemStyle:{color:LG("#9EDDBF","#3E8A68")}},{name:"Décaissements",type:"bar",stack:"x",data:dec,itemStyle:{color:LG("#B5544A","#F09A8E")}},
-    {name:"Solde",type:"line",data:bal,smooth:.3,symbol:"circle",symbolSize:7,lineStyle:{color:C.champ,width:2.5,shadowBlur:10,shadowColor:"rgba(235,211,166,.6)"},itemStyle:{color:C.champ},
-     markLine:{symbol:"none",label:{formatter:"Seuil de sécurité",position:"insideStartTop",color:C.red,fontSize:11},lineStyle:{color:C.red,type:[6,4]},data:[{yAxis:seuil}]}}]});
-  mk("c2",{tooltip:{trigger:"item",backgroundColor:"rgba(13,8,56,.95)",borderColor:"rgba(205,174,128,.45)",textStyle:{color:"#F4F3F0"},valueFormatter:function(v){return M(v)+" "+U;}},legend:{bottom:0,textStyle:{color:C.soft,fontSize:11}},
-   series:[{type:"pie",radius:["45%","70%"],center:["50%","45%"],itemStyle:{borderColor:"#0D0838",borderWidth:2},label:{color:C.soft,formatter:function(p){return pct(p.percent/100,0);}},
-    data:[{name:"Fournisseurs",value:sum(dn.f),itemStyle:{color:"#CDAE80"}},{name:"Salaires",value:sum(dn.s),itemStyle:{color:"#7A6BB0"}},{name:"Impôts et taxes",value:sum(dn.t),itemStyle:{color:"#E58579"}},{name:"Échéances d'emprunt",value:sum(dn.e),itemStyle:{color:"#74C6A0"}}]}]});
-  var r1=document.getElementById("r1");r1.addEventListener("input",function(){var x=simB(+r1.value/100);document.getElementById("o1").textContent=r1.value+" %";var o2=document.getElementById("o2");o2.textContent=M(x[0])+" "+U;o2.className="cz "+(x[0]<seuil?"bad":"good");document.getElementById("o3").textContent="S"+x[1];});
-}
 
-if(m==="cpt"){
-  var cre=CAa/365*dso;
-  var sh=[.52,.16,.1,.07,.08,.07].map(function(v){return v*rr(.8,1.2);});var ss=sh.reduce(function(a,b){return a+b;},0);sh=sh.map(function(v){return v/ss;});
-  var ag=["Non échu","0 à 30 j","31 à 60 j","61 à 90 j","91 à 180 j","Plus de 180 j"];
-  var agv=sh.map(function(v){return cre*v;}), o90=agv[4]+agv[5], o60=agv[3]+o90;
-  var cyc=[["Banque et rapprochements",rr(.85,1)],["Clients",rr(.6,.9)],["Fournisseurs",rr(.65,.95)],["Stocks",rr(.4,.8)],["Immobilisations",rr(.7,1)],["Paie et charges sociales",rr(.8,1)],["TVA",rr(.75,1)],["Provisions et cut-off",rr(.3,.65)]].map(function(c){return [c[0],Math.min(1,Math.round(c[1]*20)/20)];});
-  var avg=cyc.reduce(function(a,c){return a+c[1];},0)/cyc.length;
-  var jj=Math.round(rr(6,10)), aj=Math.round(rr(18,48)), ecb=Math.round(rr(4,28))*1000*(cur==="EUR"?.1:1);
-  var cl=["Grande distribution","Industriel","Administration","Grossiste","Export"].map(function(t,i){return ["Client "+String(i+1).padStart(2,"0")+" · "+t,o90*rr(.07,.22),Math.round(rr(95,260))];}).sort(function(a,b){return b[1]-a[1];});
-  app.innerHTML=head("Clôture du mois et balance âgée","comptabilité · clôture d\'octobre 2026")+
-  act("Clôture à J+"+jj+" pour un objectif de J+5, et "+M(o90)+" "+U+" de créances clients échues depuis plus de 90 jours.")+
-  '<div class="kpis">'+
-   kpi("Délai de clôture","J+"+jj,"","objectif J+5",jj>5?"dn":"up",jj>5)+
-   kpi("Créances échues à plus de 90 jours",M(o90),U,pct(o90/cre)+" de l\'encours clients","dn")+
-   kpi("Délai client (DSO)",dso,"jours","encours "+M(cre)+" "+U,"neu")+
-   kpi("Comptes à justifier",aj,"","écart bancaire non expliqué : "+nf(ecb,0)+" "+(cur==="EUR"?"€":"MAD"),"neu")+
-  '</div><div class="grid">'+
-   '<div class="card s8"><h2>Balance âgée clients</h2><div class="sub">Encours par ancienneté, en '+U+'</div><div id="c1" class="cv"></div></div>'+
-   '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Et si on relançait les retards ?</h3>'+
-    '<div class="ctl"><label for="r1"><span>Créances de plus de 60 jours récupérées</span><strong id="o1">0 %</strong></label><input id="r1" type="range" min="0" max="80" value="0"></div>'+
-    '<div class="res"><span>Trésorerie récupérée</span><span class="cz" id="o2">0</span></div>'+
-    '<div class="res"><span>Délai client</span><span><span class="cz">'+dso+'</span><span class="arrow">→</span><span class="cz" id="o3">'+dso+' jours</span></span></div></div>'+
-   '<div class="card s6"><h2>Avancement de la clôture</h2><div class="sub">'+pct(avg,0)+' des travaux terminés, par cycle</div><div class="prog">'+
-    cyc.map(function(c){return '<div class="pr"><span>'+c[0]+'</span><div class="bar"><i class="'+(c[1]>=1?"ok":"")+'" style="width:'+Math.round(c[1]*100)+'%"></i></div><span class="v">'+Math.round(c[1]*100)+' %</span></div>';}).join("")+
-   '</div></div>'+
-   '<div class="card s6"><h2>Les cinq retards à relancer en premier</h2><div class="sub">Créances échues à plus de 90 jours</div><div class="tw"><table><thead><tr><th>Client</th><th class="n">Montant</th><th class="n">Retard</th></tr></thead><tbody>'+
-    cl.map(function(c){return '<tr><td>'+c[0]+'</td><td class="n">'+M(c[1])+' '+U+'</td><td class="n bad">'+c[2]+' j</td></tr>';}).join("")+
-   '</tbody></table></div></div>'+
-  '</div>'+cta+foot;
-  mk("c1",{grid:{left:8,right:8,top:24,bottom:8,containLabel:true},tooltip:TT,
-   xAxis:{type:"category",data:ag,axisTick:{show:false},axisLabel:Object.assign({},AXL,{interval:0,color:C.soft})},yAxis:{type:"value",axisLabel:AXL,splitLine:SPL},
-   series:[{type:"bar",barWidth:"55%",data:agv.map(function(v,i){return {value:v,itemStyle:{borderRadius:[4,4,0,0],color:i===0?LG("#9EDDBF","#3E8A68"):i<3?GOLDV():LG("#F09A8E","#B5544A")}};}),
-    label:{show:true,position:"top",fontFamily:"Cinzel",fontSize:12,color:C.champ,formatter:function(p){return M(p.value);}}}]});
-  var r1=document.getElementById("r1");r1.addEventListener("input",function(){var r=+r1.value/100,g=o60*r,nd=Math.round((cre-g)/CAa*365);document.getElementById("o1").textContent=r1.value+" %";var o2=document.getElementById("o2");o2.textContent="+"+M(g)+" "+U;o2.className="cz good";document.getElementById("o3").textContent=nd+" jours";});
+  if(m==="cdg"){
+    var EBb=y("ebitda_budget"),EBr=y("ebitda"),mb=+Y.mb_reelle,mbB=+S.mb_budget,CAy=y("ca_budget_annuel"),t0=+S.ecart_activite;
+    var rest=sum(bud.slice(N));
+    var land=function(t){return CAr+rest*(1+t);};
+    var cc=of("CentresCouts");
+    app.innerHTML=head("Budget contre réel","contrôle de gestion · "+periode)+
+    act("Le chiffre d'affaires est à "+pct(CAr/CAb)+" du budget ; l'EBITDA "+(EBr>=EBb?"dépasse":"manque")+" l'objectif de "+M(Math.abs(EBr-EBb))+" "+U+".")+
+    '<div class="kpis">'+
+     kpi("CA réel",M(CAr),U,(ecart>=0?"+":"")+pct(ecart)+" contre le budget",ecart>=0?"up":"dn")+
+     kpi("EBITDA réel",M(EBr),U,(EBr>=EBb?"+":"−")+M(Math.abs(EBr-EBb))+" "+U+" contre le budget",EBr>=EBb?"up":"dn",EBr<EBb)+
+     kpi("Marge brute",pct(mb),"","objectif "+pct(mbB),mb>=mbB?"up":"dn")+
+     kpi("Atterrissage annuel",M(y("atterrissage")),U,"budget "+M(CAy)+" "+U,"neu")+
+    '</div><div class="grid">'+
+     '<div class="card s8"><h2>Réel contre budget, mois par mois</h2><div class="sub">Chiffre d\'affaires en '+U+' et écart cumulé</div><div id="c1" class="cv"></div></div>'+
+     '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Où finira l\'année ?</h3>'+
+      '<div class="ctl"><label for="r1"><span>Fin d\'année contre budget</span><strong id="o1"></strong></label><input id="r1" type="range" min="-15" max="15" value="'+Math.round(t0*100)+'"></div>'+
+      '<div class="res"><span>CA annuel estimé</span><span class="cz" id="o2"></span></div>'+
+      '<div class="res"><span>Écart au budget annuel</span><span class="cz" id="o3"></span></div></div>'+
+     '<div class="card s6"><h2>Pourquoi l\'EBITDA s\'écarte du budget</h2><div class="sub">Analyse des écarts, en '+U+'</div><div id="c2" class="cv sm"></div></div>'+
+     '<div class="card s6"><h2>Centres de coûts sous surveillance</h2><div class="sub">Cumul à fin '+moisFin+', en '+U+'</div><div class="tw"><table><thead><tr><th>Centre</th><th class="n">Budget</th><th class="n">Réel</th><th class="n">Écart</th></tr></thead><tbody>'+
+      cc.map(function(c){var e=+c.ecart_pct;return '<tr><td>'+esc(c.centre)+'</td><td class="n">'+M(c.budget*k)+'</td><td class="n">'+M(c.reel*k)+'</td><td class="n '+(e>.05?"bad":e<0?"good":"")+'">'+(e>=0?"+":"")+pct(e)+'</td></tr>';}).join("")+
+     '</tbody></table></div></div>'+
+    '</div>'+cta+foot;
+    var cum=0,cumA=real.map(function(r,i){cum+=r-bud[i];return cum;});
+    mk("c1",{grid:{left:8,right:8,top:30,bottom:8,containLabel:true},tooltip:TT,legend:{top:0,right:0,textStyle:{color:C.soft,fontSize:11},data:["Réel","Budget","Écart cumulé"]},
+     xAxis:{type:"category",data:MO.slice(0,N),axisTick:{show:false},axisLabel:AXL},yAxis:[{type:"value",axisLabel:AXL,splitLine:SPL},{type:"value",axisLabel:AXL,splitLine:{show:false}}],
+     series:[{name:"Réel",type:"bar",data:real,barWidth:"34%",itemStyle:{color:GOLDV(),borderRadius:[4,4,0,0]}},{name:"Budget",type:"bar",data:bud.slice(0,N),barWidth:"34%",itemStyle:{color:"rgba(255,255,255,.22)",borderRadius:[4,4,0,0]}},
+      {name:"Écart cumulé",type:"line",yAxisIndex:1,data:cumA,symbol:"circle",symbolSize:6,lineStyle:{color:cum>=0?C.green:C.red,width:2},itemStyle:{color:cum>=0?C.green:C.red}}]});
+    waterfall("c2",[{n:"EBITDA budget",v:EBb,t:1},{n:"Volume",v:y("effet_volume")},{n:"Prix de vente",v:y("effet_prix")},{n:"Coût matières",v:y("effet_matieres")},{n:"Personnel",v:y("effet_personnel")},{n:"Frais généraux",v:y("effet_fg")},{n:"EBITDA réel",v:EBr,t:1}],{min:Math.floor(Math.min(EBb,EBr)*.85)});
+    var r1=document.getElementById("r1");var upd=function(){var t=+r1.value/100,l=land(t),e=CAy?l/CAy-1:0;document.getElementById("o1").textContent=(t>=0?"+":"")+r1.value+" %";document.getElementById("o2").textContent=M(l)+" "+U;var o3=document.getElementById("o3");o3.textContent=(e>=0?"+":"")+pct(e);o3.className="cz "+(e>=0?"good":"bad");};
+    r1.addEventListener("input",upd);upd();
+  }
+
+  if(m==="tre"){
+    var rows=of("Tresorerie13S").sort(function(a,b){return a.semaine-b.semaine;});
+    var W=rows.map(function(r){return "S"+r.semaine;}),enc=rows.map(function(r){return r.encaissements*k;}),dec=rows.map(function(r){return -r.decaissements*k;}),bal=rows.map(function(r){return r.solde*k;});
+    var C0=y("treso_initiale"),seuil=y("seuil_treso"),minB=Math.min.apply(null,bal),minW=bal.indexOf(minB)+1;
+    var simB=function(rt){var bb=C0,mn=Infinity,mw=1;for(var i=0;i<enc.length;i++){bb+=enc[i]*(1-rt)+(i>=4?enc[i-4]*rt:0)+dec[i];if(bb<mn){mn=bb;mw=i+1;}}return [mn,mw];};
+    app.innerHTML=head("Trésorerie à 13 semaines","trésorerie · prévision glissante")+
+    act("Point bas de "+M(minB)+" "+U+" en semaine "+minW+(minB<seuil?" : sous le seuil de sécurité, il faut agir maintenant.":" : le seuil de sécurité tient, mais la marge est à surveiller."))+
+    '<div class="kpis">'+
+     kpi("Trésorerie aujourd\'hui",M(C0),U,"seuil de sécurité "+M(seuil)+" "+U,"neu")+
+     kpi("Point bas",M(minB),U,"semaine "+minW,minB<seuil?"dn":"up",minB<seuil)+
+     kpi("Trésorerie à 13 semaines",M(bal[bal.length-1]),U,(bal[bal.length-1]>=C0?"+":"−")+M(Math.abs(bal[bal.length-1]-C0))+" "+U,bal[bal.length-1]>=C0?"up":"dn")+
+     kpi("Délai client",dso,"jours","fournisseurs "+dpo+" jours",dso>dpo?"dn":"up")+
+    '</div><div class="grid">'+
+     '<div class="card s8"><h2>Solde de trésorerie, semaine par semaine</h2><div class="sub">Encaissements, décaissements et solde, en '+U+'</div><div id="c1" class="cv"></div></div>'+
+     '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Et si les clients payaient en retard ?</h3>'+
+      '<div class="ctl"><label for="r1"><span>Encaissements décalés d\'un mois</span><strong id="o1">0 %</strong></label><input id="r1" type="range" min="0" max="40" value="0"></div>'+
+      '<div class="res"><span>Point bas</span><span><span class="cz">'+M(minB)+'</span><span class="arrow">→</span><span class="cz" id="o2">'+M(minB)+' '+U+'</span></span></div>'+
+      '<div class="res"><span>Semaine du point bas</span><span class="cz" id="o3">S'+minW+'</span></div></div>'+
+     '<div class="card s6"><h2>Ce qui sort de la caisse</h2><div class="sub">Décaissements sur 13 semaines, en '+U+'</div><div id="c2" class="cv sm"></div></div>'+
+     '<div class="card s6"><h2>Les semaines à surveiller</h2><div class="sub">Solde prévisionnel et marge sur le seuil</div><div class="tw"><table><thead><tr><th>Semaine</th><th class="n">Solde</th><th class="n">Marge sur le seuil</th></tr></thead><tbody>'+
+      bal.map(function(v,i){return [i,v];}).sort(function(a,b){return a[1]-b[1];}).slice(0,5).map(function(x){var mg=x[1]-seuil;return '<tr><td>Semaine '+(x[0]+1)+'</td><td class="n">'+M(x[1])+'</td><td class="n '+(mg<0?"bad":"good")+'">'+(mg>=0?"+":"−")+M(Math.abs(mg))+'</td></tr>';}).join("")+
+     '</tbody></table></div></div>'+
+    '</div>'+cta+foot;
+    mk("c1",{grid:{left:8,right:8,top:30,bottom:8,containLabel:true},tooltip:TT,legend:{top:0,right:0,textStyle:{color:C.soft,fontSize:11},data:["Encaissements","Décaissements","Solde"]},
+     xAxis:{type:"category",data:W,axisTick:{show:false},axisLabel:AXL},yAxis:{type:"value",axisLabel:AXL,splitLine:SPL},
+     series:[{name:"Encaissements",type:"bar",stack:"x",data:enc,barWidth:"46%",itemStyle:{color:LG("#9EDDBF","#3E8A68")}},{name:"Décaissements",type:"bar",stack:"x",data:dec,itemStyle:{color:LG("#B5544A","#F09A8E")}},
+      {name:"Solde",type:"line",data:bal,smooth:.3,symbol:"circle",symbolSize:7,lineStyle:{color:C.champ,width:2.5,shadowBlur:10,shadowColor:"rgba(235,211,166,.6)"},itemStyle:{color:C.champ},
+       markLine:{symbol:"none",label:{formatter:"Seuil de sécurité",position:"insideStartTop",color:C.red,fontSize:11},lineStyle:{color:C.red,type:[6,4]},data:[{yAxis:seuil}]}}]});
+    mk("c2",{tooltip:{trigger:"item",backgroundColor:"rgba(13,8,56,.95)",borderColor:"rgba(205,174,128,.45)",textStyle:{color:"#F4F3F0"},valueFormatter:function(v){return M(v)+" "+U;}},legend:{bottom:0,textStyle:{color:C.soft,fontSize:11}},
+     series:[{type:"pie",radius:["45%","70%"],center:["50%","45%"],itemStyle:{borderColor:"#0D0838",borderWidth:2},label:{color:C.soft,formatter:function(p){return pct(p.percent/100,0);}},
+      data:[{name:"Fournisseurs",value:sum(rows.map(function(r){return r.fournisseurs*k;})),itemStyle:{color:"#CDAE80"}},{name:"Salaires",value:sum(rows.map(function(r){return r.salaires*k;})),itemStyle:{color:"#7A6BB0"}},{name:"Impôts et taxes",value:sum(rows.map(function(r){return r.impots*k;})),itemStyle:{color:"#E58579"}},{name:"Échéances d'emprunt",value:sum(rows.map(function(r){return r.echeances*k;})),itemStyle:{color:"#74C6A0"}}]}]});
+    var r1=document.getElementById("r1");r1.addEventListener("input",function(){var x=simB(+r1.value/100);document.getElementById("o1").textContent=r1.value+" %";var o2=document.getElementById("o2");o2.textContent=M(x[0])+" "+U;o2.className="cz "+(x[0]<seuil?"bad":"good");document.getElementById("o3").textContent="S"+x[1];});
+  }
+
+  if(m==="cpt"){
+    var cre=y("encours_clients"),o90=y("creances_90"),o60=y("creances_60"),CAa=y("ca_annualise");
+    var ag=of("BalanceAgee").sort(function(a,b){return a.ordre-b.ordre;});
+    var cyc=of("Cloture"),avg=sum(cyc.map(function(c){return c.avancement;}))/cyc.length;
+    var cl=of("Retards").sort(function(a,b){return b.montant-a.montant;});
+    var jj=Math.round(+S.delai_cloture),aj=Math.round(+S.comptes_justifier),ecb=(+S.ecart_bancaire)*k;
+    app.innerHTML=head("Clôture du mois et balance âgée","comptabilité · clôture de "+moisFin+" "+par.exercice)+
+    act("Clôture à J+"+jj+" pour un objectif de J+5, et "+M(o90)+" "+U+" de créances clients échues depuis plus de 90 jours.")+
+    '<div class="kpis">'+
+     kpi("Délai de clôture","J+"+jj,"","objectif J+5",jj>5?"dn":"up",jj>5)+
+     kpi("Créances échues à plus de 90 jours",M(o90),U,pct(o90/cre)+" de l\'encours clients","dn")+
+     kpi("Délai client (DSO)",dso,"jours","encours "+M(cre)+" "+U,"neu")+
+     kpi("Comptes à justifier",aj,"","écart bancaire non expliqué : "+nf(ecb,0)+" "+(cur==="EUR"?"€":"MAD"),"neu")+
+    '</div><div class="grid">'+
+     '<div class="card s8"><h2>Balance âgée clients</h2><div class="sub">Encours par ancienneté, en '+U+'</div><div id="c1" class="cv"></div></div>'+
+     '<div class="card s4 sim"><div class="tag">Simulateur</div><h3>Et si on relançait les retards ?</h3>'+
+      '<div class="ctl"><label for="r1"><span>Créances de plus de 60 jours récupérées</span><strong id="o1">0 %</strong></label><input id="r1" type="range" min="0" max="80" value="0"></div>'+
+      '<div class="res"><span>Trésorerie récupérée</span><span class="cz" id="o2">0</span></div>'+
+      '<div class="res"><span>Délai client</span><span><span class="cz">'+dso+'</span><span class="arrow">→</span><span class="cz" id="o3">'+dso+' jours</span></span></div></div>'+
+     '<div class="card s6"><h2>Avancement de la clôture</h2><div class="sub">'+pct(avg,0)+' des travaux terminés, par cycle</div><div class="prog">'+
+      cyc.map(function(c){var v=Math.round(c.avancement*100);return '<div class="pr"><span>'+esc(c.cycle)+'</span><div class="bar"><i class="'+(v>=100?"ok":"")+'" style="width:'+v+'%"></i></div><span class="v">'+v+' %</span></div>';}).join("")+
+     '</div></div>'+
+     '<div class="card s6"><h2>Les cinq retards à relancer en premier</h2><div class="sub">Créances échues à plus de 90 jours</div><div class="tw"><table><thead><tr><th>Client</th><th class="n">Montant</th><th class="n">Retard</th></tr></thead><tbody>'+
+      cl.map(function(c){return '<tr><td>'+esc(c.client)+'</td><td class="n">'+M(c.montant*k)+' '+U+'</td><td class="n bad">'+c.jours+' j</td></tr>';}).join("")+
+     '</tbody></table></div></div>'+
+    '</div>'+cta+foot;
+    mk("c1",{grid:{left:8,right:8,top:24,bottom:8,containLabel:true},tooltip:TT,
+     xAxis:{type:"category",data:ag.map(function(a){return a.tranche;}),axisTick:{show:false},axisLabel:Object.assign({},AXL,{interval:0,color:C.soft})},yAxis:{type:"value",axisLabel:AXL,splitLine:SPL},
+     series:[{type:"bar",barWidth:"55%",data:ag.map(function(a,i){return {value:a.montant*k,itemStyle:{borderRadius:[4,4,0,0],color:i===0?LG("#9EDDBF","#3E8A68"):i<3?GOLDV():LG("#F09A8E","#B5544A")}};}),
+      label:{show:true,position:"top",fontFamily:"Cinzel",fontSize:12,color:C.champ,formatter:function(p){return M(p.value);}}}]});
+    var r1=document.getElementById("r1");r1.addEventListener("input",function(){var r=+r1.value/100,g=o60*r,nd=Math.round((cre-g)/CAa*365);document.getElementById("o1").textContent=r1.value+" %";var o2=document.getElementById("o2");o2.textContent="+"+M(g)+" "+U;o2.className="cz good";document.getElementById("o3").textContent=nd+" jours";});
+  }
+  document.title=(prenom?prenom+" · ":"")+"Cockpit financier";
 }
-document.title=(prenom?prenom+" · ":"")+"Cockpit financier";
 })();
 </script>
 </body>
